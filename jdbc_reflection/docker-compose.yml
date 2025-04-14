@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  plataforma-curso:
+    image: danilotakeo/jdbc_example:latest
+    container_name: jdbc_example
+    depends_on:
+      - flyway
+    environment:
+      - DATABASE_URL=jdbc:mysql://mysql-db:3306/plataforma
+      - DB_USER=plataforma
+      - DB_PASSWORD=root
+    networks:
+      - app
+    stdin_open: true
+    tty: true
+    
+  flyway:
+    image: flyway/flyway:latest
+    container_name: flyway-migrations
+    depends_on:
+      - mysql-db
+    networks:
+      - app
+    command: -url=jdbc:mysql://mysql-db:3306/plataforma?allowPublicKeyRetrieval=true -user=root -password=root -connectRetries=10 migrate
+    volumes:
+      - ./src/main/resources/db/migration:/flyway/sql
+
+  mysql-db:
+    image: mysql:8.1
+    container_name: mysql-db
+    restart: always
+    environment:
+      MYSQL_DATABASE: plataforma
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - app
+
+volumes:
+  mysql_data:
+
+networks:
+  app:

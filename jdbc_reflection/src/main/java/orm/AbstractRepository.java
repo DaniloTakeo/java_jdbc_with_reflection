@@ -4,9 +4,13 @@ import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.Statement;
+import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+
+import config.DatabaseConnection;
 
 public abstract class AbstractRepository<T, ID> implements GenericRepository<T, ID> {
     private final Class<T> entityClass;
@@ -19,44 +23,55 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
 
     @Override
     public void save(T entity) {
-        StringBuilder sql = new StringBuilder("INSERT INTO ");
-        sql.append(getTableName()).append(" (");
+        Class<?> clazz = entity.getClass();
+        String tableName = clazz.getSimpleName().toLowerCase();
 
-        Field[] fields = entityClass.getDeclaredFields();
+        List<String> columnNames = new ArrayList<>();
+        List<String> placeholders = new ArrayList<>();
         List<Object> values = new ArrayList<>();
 
-        for (Field field : fields) {
-            if (field.getName().equalsIgnoreCase("id")) continue; // Ignora ID autogerado
-            sql.append(field.getName()).append(", ");
-        }
-        sql.setLength(sql.length() - 2); // Remove última vírgula
-        sql.append(") VALUES (");
-
-        for (Field field : fields) {
-            if (field.getName().equalsIgnoreCase("id")) continue;
-            sql.append("?, ");
-        }
-        sql.setLength(sql.length() - 2); // Remove última vírgula
-        sql.append(")");
-
-        try (PreparedStatement stmt = connection.prepareStatement(sql.toString(), Statement.RETURN_GENERATED_KEYS)) {
-            int index = 1;
-            for (Field field : fields) {
-                if (field.getName().equalsIgnoreCase("id")) continue;
+        // Percorre a hierarquia de herança até chegar em Object
+        for (Class<?> current = clazz; current != null && current != Object.class; current = current.getSuperclass()) {
+            for (Field field : current.getDeclaredFields()) {
                 field.setAccessible(true);
-                stmt.setObject(index++, field.get(entity));
+
+                // Ignora listas, mapas, e objetos complexos (relacionamentos)
+                if (Collection.class.isAssignableFrom(field.getType()) ||
+                    Map.class.isAssignableFrom(field.getType()) ||
+                    (!field.getType().isPrimitive()
+                        && !field.getType().getName().startsWith("java.lang")
+                        && !field.getType().getName().startsWith("java.time")
+                        && !Number.class.isAssignableFrom(field.getType())
+                        && !field.getType().equals(Boolean.class))) {
+                    continue;
+                }
+
+                columnNames.add(field.getName());
+                try {
+                    values.add(field.get(entity));
+                    placeholders.add("?");
+                } catch (IllegalAccessException e) {
+                    throw new RuntimeException("Erro ao acessar valor do campo: " + field.getName(), e);
+                }
+            }
+        }
+
+        String sql = String.format("INSERT INTO %s (%s) VALUES (%s)",
+                tableName,
+                String.join(", ", columnNames),
+                String.join(", ", placeholders)
+        );
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            for (int i = 0; i < values.size(); i++) {
+                stmt.setObject(i + 1, values.get(i));
             }
 
             stmt.executeUpdate();
 
-            // Se quiser setar o ID gerado na entidade
-            ResultSet generatedKeys = stmt.getGeneratedKeys();
-            if (generatedKeys.next()) {
-                Field idField = entityClass.getDeclaredField("id");
-                idField.setAccessible(true);
-                idField.set(entity, generatedKeys.getObject(1));
-            }
-        } catch (Exception e) {
+        } catch (SQLException e) {
             throw new RuntimeException("Erro ao salvar entidade", e);
         }
     }
@@ -84,7 +99,6 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
     }
 
     private String getTableName() {
-        // Por padrão usa o nome da classe como nome da tabela
         return entityClass.getSimpleName().toLowerCase();
     }
 }

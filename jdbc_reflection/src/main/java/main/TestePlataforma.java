@@ -23,9 +23,11 @@ import model.pagamento.PagamentoPix;
 import model.pagamento.PagamentoStatus;
 import model.pessoa.Aluno;
 import model.pessoa.Instrutor;
+import repository.AlunoRepository;
 
 public class TestePlataforma {
 	private static AlunoDAO alunoDao;
+	private static AlunoRepository alunoRepository;
 	private static InstrutorDAO instrutorDao;
 	private static CursoDAO cursoDao;
 	private static AulaDAO aulaDao;
@@ -45,6 +47,9 @@ public class TestePlataforma {
 		aulaDao = new AulaDAO(conn);
 		moduloDao = new ModuloDAO(conn, aulaDao);
 		aulaDao.setModuloDao(moduloDao);
+		
+		alunoRepository = new AlunoRepository(conn, Aluno.class);
+		
 		try (Connection connection = DatabaseConnection.getConnection()) {
 			System.out.println("Conexão estabelecida com sucesso!");
 		} catch (SQLException e) {
@@ -135,7 +140,8 @@ public class TestePlataforma {
 		System.out.print("Matrícula do aluno: ");
 		String matricula = scanner.nextLine();
 		Aluno aluno = Aluno.builder().matricula(matricula).nome(nome).email(email).senha(senha).build();
-		alunoDao.salvar(aluno);
+		//alunoDao.salvar(aluno);
+		alunoRepository.save(aluno);
 		System.out.println("Aluno criado com sucesso!");
 	}
 

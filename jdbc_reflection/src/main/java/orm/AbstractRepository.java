@@ -1,10 +1,13 @@
 package orm;
 
 import java.lang.reflect.Field;
+import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -78,24 +81,104 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
 
     @Override
     public T findById(ID id) {
-        String sql = "SELECT * FROM " + getTableName() + " WHERE id = ?";
+        Class<?> clazz = entityClass;
+        String tableName = clazz.getSimpleName().toLowerCase();
 
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setObject(1, id);
+        String sql = String.format("SELECT * FROM %s WHERE id = ?", tableName);
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setObject(1, id); // usa setObject para aceitar qualquer tipo de ID
             ResultSet rs = stmt.executeQuery();
 
             if (rs.next()) {
                 T entity = entityClass.getDeclaredConstructor().newInstance();
-                for (Field field : entityClass.getDeclaredFields()) {
-                    field.setAccessible(true);
-                    field.set(entity, rs.getObject(field.getName()));
+
+                for (Class<?> current = clazz; current != null && current != Object.class; current = current.getSuperclass()) {
+                    for (Field field : current.getDeclaredFields()) {
+                        field.setAccessible(true);
+                        try {
+                            Object value = rs.getObject(field.getName());
+
+                            if (value != null) {
+                                if (field.getType().isEnum()) {
+                                    Object enumValue = Enum.valueOf((Class<Enum>) field.getType(), value.toString());
+                                    field.set(entity, enumValue);
+                                } else if (field.getType().equals(LocalDate.class) && value instanceof Date) {
+                                    field.set(entity, ((Date) value).toLocalDate());
+                                } else if (field.getType().equals(BigDecimal.class)) {
+                                    field.set(entity, new BigDecimal(value.toString()));
+                                } else {
+                                    field.set(entity, value);
+                                }
+                            }
+                        } catch (SQLException | IllegalArgumentException e) {
+                            System.err.println("Erro ao mapear campo: " + field.getName() + " — " + e.getMessage());
+                        }
+                    }
                 }
+
                 return entity;
             }
+
         } catch (Exception e) {
             throw new RuntimeException("Erro ao buscar entidade por ID", e);
         }
+
         return null;
+    }
+    
+    @Override
+    public List<T> findAll() {
+        Class<?> clazz = entityClass;
+        String tableName = clazz.getSimpleName().toLowerCase();
+
+        String sql = String.format("SELECT * FROM %s", tableName);
+
+        List<T> entities = new ArrayList<>();
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+
+            while (rs.next()) {
+                T entity = entityClass.getDeclaredConstructor().newInstance();
+
+                // Itera pelos campos da classe e de suas superclasses
+                for (Class<?> current = clazz; current != null && current != Object.class; current = current.getSuperclass()) {
+                    for (Field field : current.getDeclaredFields()) {
+                        field.setAccessible(true);
+                        try {
+                            Object value = rs.getObject(field.getName());
+
+                            if (value != null) {
+                                if (field.getType().isEnum()) {
+                                    Object enumValue = Enum.valueOf((Class<Enum>) field.getType(), value.toString());
+                                    field.set(entity, enumValue);
+                                } else if (field.getType().equals(LocalDate.class) && value instanceof Date) {
+                                    field.set(entity, ((Date) value).toLocalDate());
+                                } else if (field.getType().equals(BigDecimal.class)) {
+                                    field.set(entity, new BigDecimal(value.toString()));
+                                } else {
+                                    field.set(entity, value);
+                                }
+                            }
+
+                        } catch (SQLException | IllegalArgumentException e) {
+                            System.err.println("Erro ao mapear campo: " + field.getName() + " — " + e.getMessage());
+                        }
+                    }
+                }
+
+                entities.add(entity);
+            }
+
+        } catch (Exception e) {
+            throw new RuntimeException("Erro ao buscar entidades", e);
+        }
+
+        return entities;
     }
 
     private String getTableName() {

@@ -146,7 +146,8 @@ public class TestePlataforma {
 	}
 
 	private static void listarAlunos() {
-		List<Aluno> alunos = alunoDao.buscarTodos();
+		//List<Aluno> alunos = alunoDao.buscarTodos();
+		List<Aluno> alunos = alunoRepository.findAll();
 		if (alunos.isEmpty()) {
 			System.out.println("Não há alunos cadastrados.");
 			return;

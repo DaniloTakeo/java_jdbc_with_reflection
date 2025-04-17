@@ -12,11 +12,6 @@ public class AlunoRepository extends AbstractRepository<Aluno, Long> {
 	}
 
 	@Override
-	public void update(Aluno entity) {
-		
-	}
-
-	@Override
 	public void deleteById(Long id) {
 		
 	}

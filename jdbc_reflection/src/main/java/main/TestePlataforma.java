@@ -146,7 +146,6 @@ public class TestePlataforma {
 	}
 
 	private static void listarAlunos() {
-		//List<Aluno> alunos = alunoDao.buscarTodos();
 		List<Aluno> alunos = alunoRepository.findAll();
 		if (alunos.isEmpty()) {
 			System.out.println("Não há alunos cadastrados.");
@@ -155,13 +154,14 @@ public class TestePlataforma {
 		System.out.println("\n--- Lista de Alunos ---");
 		for (int i = 0; i < alunos.size(); i++) {
 			Aluno aluno = alunos.get(i);
-			System.out.println((i + 1) + "ID: " + aluno.getId() + ". Nome: " + aluno.getNome() + ", Email: "
+			System.out.println((i + 1) + " ID: " + aluno.getId() + ". Nome: " + aluno.getNome() + ", Email: "
 					+ aluno.getEmail() + ", Matrícula: " + aluno.getMatricula());
 		}
 	}
 
 	private static void atualizarAluno() {
-		List<Aluno> alunos = alunoDao.buscarTodos();
+		//List<Aluno> alunos = alunoDao.buscarTodos();
+		List<Aluno> alunos = alunoRepository.findAll();
 		if (alunos.isEmpty()) {
 			System.out.println("Não há alunos cadastrados.");
 			return;
@@ -192,7 +192,8 @@ public class TestePlataforma {
 			aluno.setMatricula(novaMatricula);
 		}
 
-		alunoDao.atualizar(aluno);
+		//alunoDao.atualizar(aluno);
+		alunoRepository.update(aluno);
 
 		System.out.println("Aluno atualizado com sucesso!");
 	}

@@ -11,9 +11,4 @@ public class AlunoRepository extends AbstractRepository<Aluno, Long> {
 		super(connection, entityClass);
 	}
 
-	@Override
-	public void deleteById(Long id) {
-		
-	}
-
 }

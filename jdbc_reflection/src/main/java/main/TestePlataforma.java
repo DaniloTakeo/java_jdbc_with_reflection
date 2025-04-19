@@ -140,7 +140,6 @@ public class TestePlataforma {
 		System.out.print("Matrícula do aluno: ");
 		String matricula = scanner.nextLine();
 		Aluno aluno = Aluno.builder().matricula(matricula).nome(nome).email(email).senha(senha).build();
-		//alunoDao.salvar(aluno);
 		alunoRepository.save(aluno);
 		System.out.println("Aluno criado com sucesso!");
 	}
@@ -160,7 +159,6 @@ public class TestePlataforma {
 	}
 
 	private static void atualizarAluno() {
-		//List<Aluno> alunos = alunoDao.buscarTodos();
 		List<Aluno> alunos = alunoRepository.findAll();
 		if (alunos.isEmpty()) {
 			System.out.println("Não há alunos cadastrados.");
@@ -192,7 +190,6 @@ public class TestePlataforma {
 			aluno.setMatricula(novaMatricula);
 		}
 
-		//alunoDao.atualizar(aluno);
 		alunoRepository.update(aluno);
 
 		System.out.println("Aluno atualizado com sucesso!");
@@ -207,7 +204,7 @@ public class TestePlataforma {
 		int id = scanner.nextInt();
 		scanner.nextLine();
 
-		alunoDao.deletar(Long.valueOf(id));
+		alunoRepository.deleteById(Long.valueOf(id));
 		System.out.println("Aluno deletado com sucesso!");
 	}
 

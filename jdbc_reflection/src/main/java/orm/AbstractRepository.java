@@ -254,6 +254,21 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
             throw new RuntimeException("Erro ao atualizar a entidade", e);
         }
     }
+    
+    public void deleteById(ID id) {
+        String tableName = getTableName();
+        String sql = String.format("DELETE FROM %s WHERE id = ?", tableName);
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setObject(1, id);
+            stmt.executeUpdate();
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Erro ao deletar entidade com id: " + id, e);
+        }
+    }
 
     private String getTableName() {
         return entityClass.getSimpleName().toLowerCase();

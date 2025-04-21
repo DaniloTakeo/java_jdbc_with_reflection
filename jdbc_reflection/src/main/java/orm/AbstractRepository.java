@@ -7,13 +7,15 @@ import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import config.DatabaseConnection;
+import orm.annotations.Transient;
 
 public abstract class AbstractRepository<T, ID> implements GenericRepository<T, ID> {
     private final Class<T> entityClass;
@@ -26,58 +28,48 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
 
     @Override
     public void save(T entity) {
-        Class<?> clazz = entity.getClass();
-        String tableName = clazz.getSimpleName().toLowerCase();
+        try {
+            Map<String, Object> columnValues = getColumnNamesAndValues(entity);
+            
+            // Gerar SQL de INSERT
+            StringBuilder sql = new StringBuilder("INSERT INTO ");
+            sql.append(getTableName()); // Nome da tabela
+            sql.append(" (");
+            
+            // Colocar os nomes das colunas (sem o 'id')
+            columnValues.keySet().forEach(col -> sql.append(col).append(", "));
+            sql.deleteCharAt(sql.length() - 2);  // Remove a última vírgula
+            sql.append(") VALUES (");
+            
+            // Colocar os valores
+            columnValues.values().forEach(val -> sql.append("'").append(val).append("', "));
+            sql.deleteCharAt(sql.length() - 2);  // Remove a última vírgula
+            sql.append(")");
 
-        List<String> columnNames = new ArrayList<>();
-        List<String> placeholders = new ArrayList<>();
-        List<Object> values = new ArrayList<>();
-
-        // Percorre a hierarquia de herança até chegar em Object
-        for (Class<?> current = clazz; current != null && current != Object.class; current = current.getSuperclass()) {
-            for (Field field : current.getDeclaredFields()) {
-                field.setAccessible(true);
-
-                // Ignora listas, mapas, e objetos complexos (relacionamentos)
-                if (Collection.class.isAssignableFrom(field.getType()) ||
-                    Map.class.isAssignableFrom(field.getType()) ||
-                    (!field.getType().isPrimitive()
-                        && !field.getType().getName().startsWith("java.lang")
-                        && !field.getType().getName().startsWith("java.time")
-                        && !Number.class.isAssignableFrom(field.getType())
-                        && !field.getType().equals(Boolean.class))) {
-                    continue;
-                }
-
-                columnNames.add(field.getName());
-                try {
-                    values.add(field.get(entity));
-                    placeholders.add("?");
-                } catch (IllegalAccessException e) {
-                    throw new RuntimeException("Erro ao acessar valor do campo: " + field.getName(), e);
+            // Preparar o statement e executá-lo
+            try (PreparedStatement preparedStatement = connection.prepareStatement(sql.toString(), Statement.RETURN_GENERATED_KEYS)) {
+                preparedStatement.executeUpdate();
+                
+                // Recuperar a chave gerada automaticamente (id)
+                try (var generatedKeys = preparedStatement.getGeneratedKeys()) {
+                    if (generatedKeys.next()) {
+                        // Assumindo que o campo 'id' é o primeiro
+                        Long generatedId = generatedKeys.getLong(1);
+                        
+                        // Definir o id gerado na entidade
+                        Field idField = entity.getClass().getDeclaredField("id");
+                        idField.setAccessible(true);
+                        idField.set(entity, generatedId);  // Atribui o id gerado
+                    }
                 }
             }
-        }
-
-        String sql = String.format("INSERT INTO %s (%s) VALUES (%s)",
-                tableName,
-                String.join(", ", columnNames),
-                String.join(", ", placeholders)
-        );
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            for (int i = 0; i < values.size(); i++) {
-                stmt.setObject(i + 1, values.get(i));
-            }
-
-            stmt.executeUpdate();
-
-        } catch (SQLException e) {
-            throw new RuntimeException("Erro ao salvar entidade", e);
+            
+            System.out.println("Entidade salva com sucesso!");
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
+
 
     @Override
     public T findById(ID id) {
@@ -272,5 +264,31 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
 
     private String getTableName() {
         return entityClass.getSimpleName().toLowerCase();
+    }
+    
+    public Map<String, Object> getColumnNamesAndValues(T entity) throws IllegalAccessException {
+        Map<String, Object> columnValues = new HashMap<>();
+        
+        // Refletir sobre os campos da classe e de suas superclasses
+        Class<?> clazz = entity.getClass();
+        while (clazz != null) {
+            for (Field field : clazz.getDeclaredFields()) {
+                // Ignorar campos que são marcados como @Transient
+                if (field.isAnnotationPresent(Transient.class)) {
+                    continue;
+                }
+                
+                // Ignorar o campo 'id', que deve ser gerado pelo banco (auto_increment)
+                if (field.getName().equals("id")) {
+                    continue;
+                }
+
+                field.setAccessible(true);  // Acessar o campo privado
+                columnValues.put(field.getName(), field.get(entity));  // Adicionar no map
+            }
+            clazz = clazz.getSuperclass();  // Subir para a classe pai
+        }
+        
+        return columnValues;
     }
 }

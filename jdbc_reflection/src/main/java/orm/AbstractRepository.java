@@ -175,75 +175,31 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
     
     @Override
     public void update(T entity) {
-        Class<?> clazz = entityClass;
-        String tableName = clazz.getSimpleName().toLowerCase();
-
-        // Prepara a parte do SET para os campos
-        StringBuilder setClause = new StringBuilder();
-        List<Object> parameters = new ArrayList<>();
-        Field idField = null;
-
-        // Percorre os campos da classe e de suas superclasses
-        for (Class<?> current = clazz; current != null && current != Object.class; current = current.getSuperclass()) {
-            for (Field field : current.getDeclaredFields()) {
-                field.setAccessible(true);
-                try {
-                    Object value = field.get(entity);
-                    
-                    // Ignora campos nulos
-                    if (value != null) {
-                        // Adiciona o campo no SET
-                        if (setClause.length() > 0) setClause.append(", ");
-                        setClause.append(field.getName()).append(" = ?");
-                        parameters.add(value);
-                    }
-
-                    // Identifica o campo ID para a cláusula WHERE
-                    if (field.getName().equalsIgnoreCase("id")) {
-                        idField = field;
-                    }
-
-                } catch (IllegalAccessException e) {
-                    System.err.println("Erro ao acessar o campo: " + field.getName() + " — " + e.getMessage());
-                }
-            }
-        }
-
-        if (idField == null) {
-            throw new IllegalArgumentException("A classe não contém um campo 'id'!");
-        }
-
-        // Obtém o valor do campo ID
-        Object idValue;
         try {
-            idValue = idField.get(entity);
-        } catch (IllegalAccessException e) {
-            throw new RuntimeException("Erro ao acessar o valor do ID", e);
-        }
+            Map<String, Object> columnValues = getColumnNamesAndValues(entity);
 
-        if (idValue == null) {
-            throw new IllegalArgumentException("O valor do campo 'id' não pode ser nulo!");
-        }
-
-        // Monta a query de update
-        String sql = String.format("UPDATE %s SET %s WHERE id = ?", tableName, setClause);
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            // Define os parâmetros do SET
-            for (int i = 0; i < parameters.size(); i++) {
-                stmt.setObject(i + 1, parameters.get(i));
+            Object idValue = getIdValue(entity);
+            if (idValue == null) {
+                throw new IllegalStateException("ID não pode ser nulo para operação de update.");
             }
 
-            // Define o parâmetro da cláusula WHERE
-            stmt.setObject(parameters.size() + 1, idValue);
+            StringBuilder sql = new StringBuilder("UPDATE ");
+            sql.append(entity.getClass().getSimpleName().toLowerCase());
+            sql.append(" SET ");
 
-            // Executa a atualização
-            stmt.executeUpdate();
+            columnValues.forEach((column, value) -> {
+                sql.append(column).append(" = '").append(value).append("', ");
+            });
+            sql.deleteCharAt(sql.length() - 2); // Remove a última vírgula
+            sql.append(" WHERE id = ").append(idValue);
 
-        } catch (SQLException e) {
-            throw new RuntimeException("Erro ao atualizar a entidade", e);
+            try (PreparedStatement preparedStatement = connection.prepareStatement(sql.toString())) {
+                preparedStatement.executeUpdate();
+            }
+
+            System.out.println("Entidade atualizada com sucesso!");
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
     
@@ -290,5 +246,22 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
         }
         
         return columnValues;
+    }
+    
+    private Object getIdValue(T entity) {
+        Class<?> clazz = entity.getClass();
+        while (clazz != null) {
+            try {
+                Field idField = clazz.getDeclaredField("id");
+                idField.setAccessible(true);
+                return idField.get(entity);
+            } catch (NoSuchFieldException e) {
+                clazz = clazz.getSuperclass();
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+                break;
+            }
+        }
+        return null;
     }
 }

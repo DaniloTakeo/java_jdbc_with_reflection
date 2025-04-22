@@ -168,7 +168,7 @@ public class TestePlataforma {
 		System.out.print("Digite o id do aluno que deseja atualizar: ");
 		int id = scanner.nextInt();
 		scanner.nextLine();
-		Aluno aluno = alunoDao.buscarPorId(Long.valueOf(id));
+		Aluno aluno = alunoRepository.findById(Long.valueOf(id));
 		System.out.print("Novo nome do aluno (ou deixe em branco para manter o mesmo): ");
 		String novoNome = scanner.nextLine();
 		if (!novoNome.isEmpty()) {

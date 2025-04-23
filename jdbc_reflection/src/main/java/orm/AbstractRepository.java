@@ -1,20 +1,20 @@
 package orm;
 
 import java.lang.reflect.Field;
-import java.math.BigDecimal;
 import java.sql.Connection;
-import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import config.DatabaseConnection;
+import orm.annotations.Column;
+import orm.annotations.Id;
 import orm.annotations.Transient;
 
 public abstract class AbstractRepository<T, ID> implements GenericRepository<T, ID> {
@@ -72,105 +72,51 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
 
 
     @Override
-    public T findById(ID id) {
-        Class<?> clazz = entityClass;
-        String tableName = clazz.getSimpleName().toLowerCase();
+    public Optional<T> findById(ID id) {
+        String tableName = getTableName();
+        String idColumn = getIdColumnName(entityClass);
 
-        String sql = String.format("SELECT * FROM %s WHERE id = ?", tableName);
+        String sql = "SELECT * FROM " + tableName + " WHERE " + idColumn + " = ?";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-            stmt.setObject(1, id); // usa setObject para aceitar qualquer tipo de ID
+            stmt.setObject(1, id);
             ResultSet rs = stmt.executeQuery();
 
             if (rs.next()) {
-                T entity = entityClass.getDeclaredConstructor().newInstance();
-
-                for (Class<?> current = clazz; current != null && current != Object.class; current = current.getSuperclass()) {
-                    for (Field field : current.getDeclaredFields()) {
-                        field.setAccessible(true);
-                        try {
-                            Object value = rs.getObject(field.getName());
-
-                            if (value != null) {
-                                if (field.getType().isEnum()) {
-                                    Object enumValue = Enum.valueOf((Class<Enum>) field.getType(), value.toString());
-                                    field.set(entity, enumValue);
-                                } else if (field.getType().equals(LocalDate.class) && value instanceof Date) {
-                                    field.set(entity, ((Date) value).toLocalDate());
-                                } else if (field.getType().equals(BigDecimal.class)) {
-                                    field.set(entity, new BigDecimal(value.toString()));
-                                } else {
-                                    field.set(entity, value);
-                                }
-                            }
-                        } catch (SQLException | IllegalArgumentException e) {
-                            System.err.println("Erro ao mapear campo: " + field.getName() + " — " + e.getMessage());
-                        }
-                    }
-                }
-
-                return entity;
+                T entity = createInstanceFromResultSet(rs);
+                return Optional.of(entity);
             }
 
-        } catch (Exception e) {
-            throw new RuntimeException("Erro ao buscar entidade por ID", e);
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
 
-        return null;
+        return Optional.empty();
     }
     
     @Override
     public List<T> findAll() {
-        Class<?> clazz = entityClass;
-        String tableName = clazz.getSimpleName().toLowerCase();
+        List<T> results = new ArrayList<>();
+        String tableName = getTableName();
 
-        String sql = String.format("SELECT * FROM %s", tableName);
-
-        List<T> entities = new ArrayList<>();
+        String sql = "SELECT * FROM " + tableName;
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql);
              ResultSet rs = stmt.executeQuery()) {
 
             while (rs.next()) {
-                T entity = entityClass.getDeclaredConstructor().newInstance();
-
-                // Itera pelos campos da classe e de suas superclasses
-                for (Class<?> current = clazz; current != null && current != Object.class; current = current.getSuperclass()) {
-                    for (Field field : current.getDeclaredFields()) {
-                        field.setAccessible(true);
-                        try {
-                            Object value = rs.getObject(field.getName());
-
-                            if (value != null) {
-                                if (field.getType().isEnum()) {
-                                    Object enumValue = Enum.valueOf((Class<Enum>) field.getType(), value.toString());
-                                    field.set(entity, enumValue);
-                                } else if (field.getType().equals(LocalDate.class) && value instanceof Date) {
-                                    field.set(entity, ((Date) value).toLocalDate());
-                                } else if (field.getType().equals(BigDecimal.class)) {
-                                    field.set(entity, new BigDecimal(value.toString()));
-                                } else {
-                                    field.set(entity, value);
-                                }
-                            }
-
-                        } catch (SQLException | IllegalArgumentException e) {
-                            System.err.println("Erro ao mapear campo: " + field.getName() + " — " + e.getMessage());
-                        }
-                    }
-                }
-
-                entities.add(entity);
+                T entity = createInstanceFromResultSet(rs);
+                results.add(entity);
             }
 
-        } catch (Exception e) {
-            throw new RuntimeException("Erro ao buscar entidades", e);
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
 
-        return entities;
+        return results;
     }
     
     @Override
@@ -248,20 +194,59 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
         return columnValues;
     }
     
+    private String getIdColumnName(Class<?> clazz) {
+        while (clazz != null) {
+            for (Field field : clazz.getDeclaredFields()) {
+                if (field.isAnnotationPresent(Id.class) && field.isAnnotationPresent(Column.class)) {
+                    return field.getAnnotation(Column.class).name();
+                }
+            }
+            clazz = clazz.getSuperclass();
+        }
+        return "id"; // fallback
+    }
+
     private Object getIdValue(T entity) {
         Class<?> clazz = entity.getClass();
         while (clazz != null) {
-            try {
-                Field idField = clazz.getDeclaredField("id");
-                idField.setAccessible(true);
-                return idField.get(entity);
-            } catch (NoSuchFieldException e) {
-                clazz = clazz.getSuperclass();
-            } catch (IllegalAccessException e) {
-                e.printStackTrace();
-                break;
+            for (Field field : clazz.getDeclaredFields()) {
+                if (field.isAnnotationPresent(Id.class)) {
+                    field.setAccessible(true);
+                    try {
+                        return field.get(entity);
+                    } catch (IllegalAccessException e) {
+                        e.printStackTrace();
+                    }
+                }
             }
+            clazz = clazz.getSuperclass();
         }
         return null;
+    }
+    
+    private T createInstanceFromResultSet(ResultSet rs) {
+        try {
+            T instance = entityClass.getDeclaredConstructor().newInstance();
+            Class<?> current = entityClass;
+
+            while (current != null) {
+                for (Field field : current.getDeclaredFields()) {
+                    if (field.isAnnotationPresent(Column.class)) {
+                        Column coluna = field.getAnnotation(Column.class);
+                        String columnName = coluna.name();
+
+                        field.setAccessible(true);
+                        Object value = rs.getObject(columnName);
+                        field.set(instance, value);
+                    }
+                }
+                current = current.getSuperclass(); // suporta herança
+            }
+
+            return instance;
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Erro ao instanciar entidade", e);
+        }
     }
 }

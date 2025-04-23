@@ -7,8 +7,6 @@ import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.FIELD)
-public @interface Column {
-    String name();
-    boolean insertable() default true;
-    boolean updatable() default true;
+public @interface Id {
+	
 }

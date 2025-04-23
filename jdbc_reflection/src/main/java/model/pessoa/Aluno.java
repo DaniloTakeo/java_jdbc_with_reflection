@@ -11,6 +11,7 @@ import lombok.experimental.SuperBuilder;
 import model.curso.Curso;
 import model.pagamento.Pagamento;
 import orm.annotations.Column;
+import orm.annotations.Id;
 import orm.annotations.Table;
 import orm.annotations.Transient;
 
@@ -22,6 +23,7 @@ import orm.annotations.Transient;
 @Table(name = "aluno")
 public class Aluno extends Pessoa {
 	
+	@Id
 	@Column(name = "id")
 	private Long id;
 	

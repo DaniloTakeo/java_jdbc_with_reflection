@@ -14,6 +14,7 @@ import orm.annotations.Column;
 import orm.annotations.Id;
 import orm.annotations.Table;
 import orm.annotations.Transient;
+import orm.annotations.UmParaMuitos;
 
 @Data
 @NoArgsConstructor
@@ -31,9 +32,11 @@ public class Aluno extends Pessoa {
 	private String matricula;
 	
 	@Transient
+	@UmParaMuitos(entidadeAlvo = Curso.class, chaveEstrangeira = "aluno_id")
     private List<Curso> listaDeCursos;
 	
 	@Transient
+	@UmParaMuitos(entidadeAlvo = Pagamento.class, chaveEstrangeira = "aluno_id")
     private List<Pagamento> pagamentos;
 
     public void inscreverNoCurso(Curso curso) {

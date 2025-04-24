@@ -2,11 +2,14 @@ package orm;
 
 import java.lang.reflect.Field;
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,8 +19,9 @@ import config.DatabaseConnection;
 import orm.annotations.Column;
 import orm.annotations.Id;
 import orm.annotations.Transient;
+import orm.annotations.UmParaMuitos;
 
-public abstract class AbstractRepository<T, ID> implements GenericRepository<T, ID> {
+public class AbstractRepository<T, ID> implements GenericRepository<T, ID> {
     private final Class<T> entityClass;
     protected final Connection connection;
 
@@ -72,7 +76,7 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
 
 
     @Override
-    public Optional<T> findById(ID id) {
+    public Optional<T> findById(ID id) throws Exception {
         String tableName = getTableName();
         String idColumn = getIdColumnName(entityClass);
 
@@ -97,7 +101,7 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
     }
     
     @Override
-    public List<T> findAll() {
+    public List<T> findAll() throws Exception {
         List<T> results = new ArrayList<>();
         String tableName = getTableName();
 
@@ -224,29 +228,86 @@ public abstract class AbstractRepository<T, ID> implements GenericRepository<T, 
         return null;
     }
     
-    private T createInstanceFromResultSet(ResultSet rs) {
-        try {
-            T instance = entityClass.getDeclaredConstructor().newInstance();
-            Class<?> current = entityClass;
+    @SuppressWarnings("unchecked")
+    protected T createInstanceFromResultSet(ResultSet rs) throws Exception {
+        T instance = entityClass.getDeclaredConstructor().newInstance();
 
-            while (current != null) {
-                for (Field field : current.getDeclaredFields()) {
-                    if (field.isAnnotationPresent(Column.class)) {
-                        Column coluna = field.getAnnotation(Column.class);
-                        String columnName = coluna.name();
+        // Considera campos herdados
+        List<Field> fields = new ArrayList<>();
+        Class<?> current = entityClass;
+        while (current != null && current != Object.class) {
+            fields.addAll(Arrays.asList(current.getDeclaredFields()));
+            current = current.getSuperclass();
+        }
 
-                        field.setAccessible(true);
-                        Object value = rs.getObject(columnName);
-                        field.set(instance, value);
+        for (Field field : fields) {
+            field.setAccessible(true);
+
+            if (field.isAnnotationPresent(Column.class)) {
+                Column coluna = field.getAnnotation(Column.class);
+                String columnName = coluna.name();
+
+                Object value = rs.getObject(columnName);
+
+                if (field.getType().equals(LocalDate.class) && value instanceof Date) {
+                    value = ((Date) value).toLocalDate();
+                } else if (field.getType().isEnum() && value instanceof String) {
+                    value = Enum.valueOf((Class<Enum>) field.getType(), (String) value);
+                }
+
+                field.set(instance, value);
+            }
+        }
+
+        // Relacionamentos @UmParaMuitos (opcional)
+        for (Field field : entityClass.getDeclaredFields()) {
+            if (field.isAnnotationPresent(UmParaMuitos.class)) {
+                field.setAccessible(true);
+                UmParaMuitos relacao = field.getAnnotation(UmParaMuitos.class);
+
+                Class<?> childClass = relacao.entidadeAlvo();
+                String chaveEstrangeira = relacao.chaveEstrangeira();
+
+                // Obtém o valor do ID da entidade atual
+                Field idField = getIdField(entityClass);
+                idField.setAccessible(true);
+                Object idValue = idField.get(instance);
+
+                if (idValue != null) {
+                    AbstractRepository<?, Object> childRepo = (AbstractRepository<?, Object>) RepositoryFactory.getInstance(connection).createRepository(entityClass); // substitua por sua factory
+                    String tableName = childClass.getSimpleName().toLowerCase();
+
+                    String query = "SELECT * FROM " + tableName + " WHERE " + chaveEstrangeira + " = ?";
+                    try (PreparedStatement stmt = connection.prepareStatement(query)) {
+                        stmt.setObject(1, idValue);
+                        ResultSet rsChild = stmt.executeQuery();
+
+                        List<Object> children = new ArrayList<>();
+                        while (rsChild.next()) {
+                            Object child = childRepo.createInstanceFromResultSet(rsChild);
+                            children.add(child);
+                        }
+
+                        field.set(instance, children);
                     }
                 }
-                current = current.getSuperclass(); // suporta herança
             }
-
-            return instance;
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Erro ao instanciar entidade", e);
         }
+
+        return instance;
+    }
+    
+    private Field getIdField(Class<?> clazz) {
+        Class<?> current = clazz;
+        while (current != null && current != Object.class) {
+            for (Field field : current.getDeclaredFields()) {
+                if (field.isAnnotationPresent(Id.class)) {
+                    field.setAccessible(true);
+                    return field;
+                }
+            }
+            current = current.getSuperclass(); // Suporte à herança
+        }
+        throw new IllegalStateException("Classe " + clazz.getSimpleName() + " não possui um campo anotado com @Id");
     }
 }

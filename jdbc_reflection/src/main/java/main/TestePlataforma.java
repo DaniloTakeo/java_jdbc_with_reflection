@@ -38,7 +38,7 @@ public class TestePlataforma {
 	private static List<Pagamento> pagamentos = new ArrayList<>();
 	private static Scanner scanner = new Scanner(System.in);
 
-	public static void main(String[] args) throws InterruptedException, SQLException {
+	public static void main(String[] args) throws Exception {
 		Thread.sleep(10000);
 		Connection conn = DatabaseConnection.getConnection();
 		alunoDao = new AlunoDAO(conn);
@@ -59,7 +59,7 @@ public class TestePlataforma {
 		menuPrincipal();
 	}
 
-	private static void menuPrincipal() throws SQLException {
+	private static void menuPrincipal() throws Exception {
 		while (true) {
 			System.out.println("\n--- Menu Principal ---");
 			System.out.println("1 - Aluno");
@@ -97,7 +97,7 @@ public class TestePlataforma {
 		}
 	}
 
-	private static void menuAluno() {
+	private static void menuAluno() throws Exception {
 		while (true) {
 			System.out.println("\n--- Menu Aluno ---");
 			System.out.println("1 - Criar Aluno");
@@ -144,7 +144,7 @@ public class TestePlataforma {
 		System.out.println("Aluno criado com sucesso!");
 	}
 
-	private static void listarAlunos() {
+	private static void listarAlunos() throws Exception {
 		List<Aluno> alunos = alunoRepository.findAll();
 		if (alunos.isEmpty()) {
 			System.out.println("Não há alunos cadastrados.");
@@ -158,7 +158,7 @@ public class TestePlataforma {
 		}
 	}
 
-	private static void atualizarAluno() {
+	private static void atualizarAluno() throws Exception {
 		List<Aluno> alunos = alunoRepository.findAll();
 		if (alunos.isEmpty()) {
 			System.out.println("Não há alunos cadastrados.");
@@ -326,7 +326,7 @@ public class TestePlataforma {
 		System.out.println("Instrutor deletado com sucesso!");
 	}
 
-	private static void menuCurso() throws SQLException {
+	private static void menuCurso() throws Exception {
 		while (true) {
 			System.out.println("\n--- Menu Curso ---");
 			System.out.println("1 - Criar Curso");
@@ -449,7 +449,7 @@ public class TestePlataforma {
 		System.out.println("Curso deletado com sucesso!");
 	}
 
-	private static void adicionarAlunoAoCurso() throws SQLException {
+	private static void adicionarAlunoAoCurso() throws Exception {
 		List<Curso> cursos = cursoDao.buscarTodos();
 		List<Aluno> alunos = alunoDao.buscarTodos();
 		if (cursos.isEmpty()) {

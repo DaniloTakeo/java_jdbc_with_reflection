@@ -77,6 +77,5 @@ O projeto utiliza MySQL para persistência dos dados. Você pode configurar o ba
 
 Sinta-se à vontade para abrir issues ou enviar pull requests. Qualquer contribuição é bem-vinda!
 
-## Licença
-
-Este projeto é licenciado sob a MIT License - veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+## 👨‍💻 Autor
+Danilo Takeo Kanizawa
